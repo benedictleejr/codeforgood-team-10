@@ -103,24 +103,11 @@ export default function Navbar() {
           className="flex items-center gap-2 text-gray-800 font-bold text-lg"
         >
           <Image src="/favicon.ico" alt="favicon" width={24} height={24} />
-          OUR TEAM NAME HERE
+          JP MORGAN
         </Link>
 
         <div className="flex gap-2 items-center">
-          <NavButton href="/">Home</NavButton>
-          {user && userRole === "admin" ? (
-            <>
-              <NavButton href="/admin">ADMIN PAGE1</NavButton>
-              <NavButton href="/management">ADMIN PAGE1</NavButton>
-            </>
-          ) : user ? (
-            <>
-              {user && <NavButton href="/donor">NORMAL USER PAGE1</NavButton>}
-              <NavButton href="/donor-dashboard">NORMAL USER PAGE1</NavButton>
-            </>
-          ) : (
-            <NavButton href="/donate">UNAUTHENTICATED PAGE1</NavButton>
-          )}
+      
         </div>
 
         <div className="flex gap-3">

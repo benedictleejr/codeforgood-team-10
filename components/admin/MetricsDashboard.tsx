@@ -1,111 +1,234 @@
-import React, { useState } from 'react';
-import { 
-  Users, 
-  Video, 
-  MessageSquare, 
-  BarChart3, 
-  Calendar, 
-  TrendingUp, 
+"use client";
+
+import React, { useEffect, useState } from "react";
+import {
+  Users,
+  Video,
+  MessageSquare,
+  BarChart3,
+  TrendingUp,
   AlertCircle,
-  Clock,
   Star,
+  Play,
+  Download,
   Filter,
   Search,
-  Download,
-  Play,
+  Settings,
   Phone,
-  Settings
-} from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
+} from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
+import { createClient } from "@/lib/supabase/client";
 
 const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState('overview');
-  const [selectedPeriod, setSelectedPeriod] = useState('30d');
+  const [activeTab, setActiveTab] = useState("overview");
+  const [selectedPeriod, setSelectedPeriod] = useState("30d");
+  const supabase = createClient();
 
-  const engagementData = [
-    { month: 'Jan', sessions: 45, satisfaction: 4.2 },
-    { month: 'Feb', sessions: 52, satisfaction: 4.1 },
-    { month: 'Mar', sessions: 48, satisfaction: 4.3 },
-    { month: 'Apr', sessions: 61, satisfaction: 4.4 },
-    { month: 'May', sessions: 58, satisfaction: 4.2 },
-    { month: 'Jun', sessions: 67, satisfaction: 4.5 }
-  ];
+  const [engagementData, setEngagementData] = useState<any[]>([]);
+  const [matchingData, setMatchingData] = useState<any[]>([]);
+  const [mentorEngagement, setMentorEngagement] = useState<any[]>([]);
+  const [upcomingSessions, setUpcomingSessions] = useState<any[]>([]);
+  const [meetings, setMeetings] = useState<any[]>([]);
+  const [metrics, setMetrics] = useState({
+  totalActivePairs: 0,
+  sessionsThisMonth: 0,
+  avgSatisfaction: 0,
+  atRiskPairs: 0,
+});
 
-  const matchingData = [
-    { name: 'Successfully Matched', value: 75, color: '#22c55e' },
-    { name: 'Pending Match', value: 15, color: '#f59e0b' },
-    { name: 'Unmatched', value: 10, color: '#ef4444' }
-  ];
+  useEffect(() => {
+    const fetchData = async () => {
+     const { data: meetings, error } = await supabase
+      .from("meetings")
+      .select(`
+        id,
+        session_date,
+        session_time,
+        mode,
+        topics,
+        mentor_rating,
+        mentee_rating,
+        mentor:profiles!meetings_mentor_id_fkey ( id, name, role ),
+        mentee:profiles!meetings_mentee_id_fkey ( id, name, role )
+      `)
+      .order("session_date", { ascending: true });
 
-  const mentorEngagement = [
-    { name: 'Dr. Sarah Chen', sessions: 12, rating: 4.8, lastActive: '2 hours ago', status: 'active' },
-    { name: 'Maria Rodriguez', sessions: 8, rating: 4.6, lastActive: '1 day ago', status: 'active' },
-    { name: 'Jennifer Wong', sessions: 15, rating: 4.9, lastActive: '3 hours ago', status: 'active' },
-    { name: 'Lisa Thompson', sessions: 6, rating: 4.3, lastActive: '5 days ago', status: 'inactive' }
-  ];
+      if (error) {
+        console.error("Error fetching meetings:", error);
+        return;
+      }
+      if (!meetings) return;
 
-  const upcomingSessions = [
-    { mentor: 'Dr. Sarah Chen', mentee: 'Alice Kumar', time: '2:00 PM', type: 'video' },
-    { mentor: 'Maria Rodriguez', mentee: 'Jenny Lim', time: '3:30 PM', type: 'chat' },
-    { mentor: 'Jennifer Wong', mentee: 'Priya Patel', time: '4:15 PM', type: 'video' }
-  ];
+      // Sessions + avg satisfaction by month
+      const monthlyStats: Record<string, { sessions: number; ratings: number[] }> = {};
+      meetings.forEach((m) => {
+        const month = new Date(m.session_date).toLocaleString("default", { month: "short" });
+        if (!monthlyStats[month]) monthlyStats[month] = { sessions: 0, ratings: [] };
+        monthlyStats[month].sessions++;
+        if (m.mentor_rating) monthlyStats[month].ratings.push(m.mentor_rating);
+      });
+      setEngagementData(
+        Object.entries(monthlyStats).map(([month, stats]) => ({
+          month,
+          sessions: stats.sessions,
+          satisfaction: stats.ratings.length
+            ? stats.ratings.reduce((a, b) => a + b, 0) / stats.ratings.length
+            : 0,
+        }))
+      );
+
+      // Matching success rate (demo logic — tweak to fit schema)
+      setMatchingData([
+        { name: "Successfully Matched", value: meetings.length, color: "#22c55e" },
+        { name: "Pending Match", value: 3, color: "#f59e0b" },
+        { name: "Unmatched", value: 1, color: "#ef4444" },
+      ]);
+
+      // Mentor engagement (sessions + avg rating)
+      const mentorStats: Record<string, { sessions: number; ratings: number[] }> = {};
+      meetings.forEach((m) => {
+        const mentorName = m.mentor?.name || "Unknown Mentor";
+        if (!mentorStats[mentorName]) mentorStats[mentorName] = { sessions: 0, ratings: [] };
+        mentorStats[mentorName].sessions++;
+        if (m.mentor_rating) mentorStats[mentorName].ratings.push(m.mentor_rating);
+      });
+      setMentorEngagement(
+        Object.entries(mentorStats).map(([name, stats]) => ({
+          name,
+          sessions: stats.sessions,
+          rating: stats.ratings.length
+            ? stats.ratings.reduce((a, b) => a + b, 0) / stats.ratings.length
+            : null,
+          lastActive: "today", 
+          status: "active", // derive based on recency
+        }))
+      );
+
+      // Next 3 upcoming sessions
+      setUpcomingSessions(
+        meetings
+          .filter((m) => new Date(m.session_date) >= new Date())
+          .slice(0, 3)
+          .map((m) => ({
+            mentor: m.mentor?.name,
+            mentee: m.mentee?.name,
+            time: m.session_time,
+            type: m.mode.toLowerCase() === "online" ? "video" : "chat",
+          }))
+      );
+
+          // Total active pairs = unique mentor-mentee pairs
+          const pairs = new Set(meetings.map((m) => `${m.mentor?.name}-${m.mentee?.name}`));
+          const totalActivePairs = pairs.size;
+
+          // Sessions this month
+          const now = new Date();
+          const sessionsThisMonth = meetings.filter((m) => {
+            const d = new Date(m.session_date);
+            return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+          }).length;
+
+          // Avg satisfaction (mean of mentor+mentee ratings)
+          const ratings: number[] = [];
+          meetings.forEach((m) => {
+            if (m.mentor_rating) ratings.push(m.mentor_rating);
+            if (m.mentee_rating) ratings.push(m.mentee_rating);
+          });
+          const avgSatisfaction = ratings.length
+            ? ratings.reduce((a, b) => a + b, 0) / ratings.length
+            : 0;
+
+          // At-risk pairs = last session > 30 days ago
+          const THIRTY_DAYS = 1000 * 60 * 60 * 24 * 30;
+          const recentPairs = new Set(
+            meetings
+              .filter((m) => new Date(m.session_date).getTime() >= Date.now() - THIRTY_DAYS)
+              .map((m) => `${m.mentor?.name}-${m.mentee?.name}`)
+          );
+          const atRiskPairs = totalActivePairs - recentPairs.size;
+
+          // Store in state
+          setMetrics({
+            totalActivePairs,
+            sessionsThisMonth,
+            avgSatisfaction,
+            atRiskPairs,
+          });
+
+    };
+
+    fetchData();
+  }, [supabase]);
 
   const renderOverview = () => (
     <div className="space-y-6">
       {/* Key Metrics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-lg shadow-sm border">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Active Pairs</p>
-              <p className="text-2xl font-bold text-gray-900">124</p>
-              <p className="text-xs text-green-600">↑ 12% vs last month</p>
-            </div>
-            <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Users className="h-6 w-6 text-blue-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow-sm border">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Sessions This Month</p>
-              <p className="text-2xl font-bold text-gray-900">67</p>
-              <p className="text-xs text-green-600">↑ 18% vs last month</p>
-            </div>
-            <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <Video className="h-6 w-6 text-green-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow-sm border">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Avg Satisfaction</p>
-              <p className="text-2xl font-bold text-gray-900">4.5</p>
-              <p className="text-xs text-green-600">↑ 0.2 vs last month</p>
-            </div>
-            <div className="h-12 w-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <Star className="h-6 w-6 text-yellow-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow-sm border">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">At-Risk Pairs</p>
-              <p className="text-2xl font-bold text-gray-900">8</p>
-              <p className="text-xs text-red-600">↑ 3 vs last month</p>
-            </div>
-            <div className="h-12 w-12 bg-red-100 rounded-lg flex items-center justify-center">
-              <AlertCircle className="h-6 w-6 text-red-600" />
-            </div>
-          </div>
-        </div>
+<div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+  {/* Total Active Pairs */}
+  <div className="bg-white p-6 rounded-lg shadow-sm border">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-medium text-gray-600">Total Active Pairs</p>
+        <p className="text-2xl font-bold text-gray-900">{metrics.totalActivePairs}</p>
       </div>
+      <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
+        <Users className="h-6 w-6 text-blue-600" />
+      </div>
+    </div>
+  </div>
+
+  {/* Sessions This Month */}
+  <div className="bg-white p-6 rounded-lg shadow-sm border">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-medium text-gray-600">Sessions This Month</p>
+        <p className="text-2xl font-bold text-gray-900">{metrics.sessionsThisMonth}</p>
+      </div>
+      <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
+        <Video className="h-6 w-6 text-green-600" />
+      </div>
+    </div>
+  </div>
+
+  {/* Avg Satisfaction */}
+  <div className="bg-white p-6 rounded-lg shadow-sm border">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-medium text-gray-600">Avg Satisfaction</p>
+        <p className="text-2xl font-bold text-gray-900">{metrics.avgSatisfaction.toFixed(1)}</p>
+      </div>
+      <div className="h-12 w-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+        <Star className="h-6 w-6 text-yellow-600" />
+      </div>
+    </div>
+  </div>
+
+  {/* At-Risk Pairs */}
+  <div className="bg-white p-6 rounded-lg shadow-sm border">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-medium text-gray-600">At-Risk Pairs</p>
+        <p className="text-2xl font-bold text-gray-900">{metrics.atRiskPairs}</p>
+      </div>
+      <div className="h-12 w-12 bg-red-100 rounded-lg flex items-center justify-center">
+        <AlertCircle className="h-6 w-6 text-red-600" />
+      </div>
+    </div>
+  </div>
+</div>
+
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -155,7 +278,26 @@ const AdminDashboard = () => {
 
       {/* Upcoming Sessions */}
       <div className="bg-white p-6 rounded-lg shadow-sm border">
-        <h3 className="text-lg font-semibold mb-4">Today's Upcoming Sessions</h3>
+<div className="bg-white p-6 rounded-lg shadow-sm border">
+  <h3 className="text-lg font-semibold mb-4">Recent Feedback</h3>
+  <div className="space-y-4 max-h-64 overflow-y-auto">
+        {meetings.slice(-5).map((m) => (
+          <div key={m.id} className="p-3 border-b">
+            <p className="text-sm font-medium text-gray-700">
+              {m.mentor?.name} → {m.mentee?.name}
+            </p>
+            <p className="text-xs text-gray-500">{m.topics}</p>
+            <blockquote className="mt-1 text-sm text-gray-600 italic">
+              “{m.mentor_feedback}”
+            </blockquote>
+            <blockquote className="mt-1 text-sm text-gray-600 italic">
+              — {m.mentee_feedback}
+            </blockquote>
+          </div>
+        ))}
+  </div>
+</div>
+
         <div className="space-y-3">
           {upcomingSessions.map((session, index) => (
             <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
@@ -361,25 +503,6 @@ const AdminDashboard = () => {
           </div>
         </div>
       </div>
-
-      {/* Communication Analytics */}
-      <div className="bg-white p-6 rounded-lg shadow-sm border">
-        <h3 className="text-lg font-semibold mb-4">Communication Analytics</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="text-center p-4 bg-blue-50 rounded-lg">
-            <div className="text-2xl font-bold text-blue-600">156</div>
-            <p className="text-sm text-gray-600">Total Messages Today</p>
-          </div>
-          <div className="text-center p-4 bg-green-50 rounded-lg">
-            <div className="text-2xl font-bold text-green-600">23</div>
-            <p className="text-sm text-gray-600">Video Calls Today</p>
-          </div>
-          <div className="text-center p-4 bg-purple-50 rounded-lg">
-            <div className="text-2xl font-bold text-purple-600">1.2h</div>
-            <p className="text-sm text-gray-600">Avg Session Duration</p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 
@@ -445,29 +568,6 @@ const AdminDashboard = () => {
             <span>Mentors & Mentees</span>
           </button>
           
-          <button
-            onClick={() => setActiveTab('communications')}
-            className={`flex items-center space-x-2 px-3 py-2 text-sm font-medium rounded-md ${
-              activeTab === 'communications'
-                ? 'bg-blue-100 text-blue-700'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <MessageSquare className="h-4 w-4" />
-            <span>Communications</span>
-          </button>
-          
-          <button
-            onClick={() => setActiveTab('analytics')}
-            className={`flex items-center space-x-2 px-3 py-2 text-sm font-medium rounded-md ${
-              activeTab === 'analytics'
-                ? 'bg-blue-100 text-blue-700'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <TrendingUp className="h-4 w-4" />
-            <span>Analytics</span>
-          </button>
         </nav>
       </div>
 
