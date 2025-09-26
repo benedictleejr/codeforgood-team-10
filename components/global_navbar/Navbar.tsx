@@ -82,11 +82,6 @@ export default function Navbar() {
             <Image src="/favicon.ico" alt="favicon" width={24} height={24} />
             OUR TEAM NAME HERE
           </Link>
-          <div className="flex gap-2 items-center">
-            <div className="h-8 w-16 bg-gray-200 rounded animate-pulse"></div>
-            <div className="h-8 w-20 bg-gray-200 rounded animate-pulse"></div>
-            <div className="h-8 w-16 bg-gray-200 rounded animate-pulse"></div>
-          </div>
           <div className="flex gap-3">
             <div className="h-8 w-20 bg-gray-200 rounded animate-pulse"></div>
           </div>
@@ -106,9 +101,22 @@ export default function Navbar() {
           JP MORGAN
         </Link>
 
-        <div className="flex gap-2 items-center">
-      
-        </div>
+        {/* <div className="flex gap-2 items-center">
+          <NavButton href="/">Home</NavButton>
+          {user && userRole === "admin" ? (
+            <>
+              <NavButton href="/admin">ADMIN PAGE1</NavButton>
+              <NavButton href="/management">ADMIN PAGE1</NavButton>
+            </>
+          ) : user ? (
+            <>
+              {user && <NavButton href="/donor">NORMAL USER PAGE1</NavButton>}
+              <NavButton href="/donor-dashboard">NORMAL USER PAGE1</NavButton>
+            </>
+          ) : (
+            <NavButton href="/donate">UNAUTHENTICATED PAGE1</NavButton>
+          )}
+        </div> */}
 
         <div className="flex gap-3">
           <AuthButton />
