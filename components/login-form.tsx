@@ -32,20 +32,44 @@ export function LoginForm({
     setIsLoading(true);
     setError(null);
 
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (error) throw error;
-      // Update this route to redirect to an authenticated route. The user already has an active session.
-      router.push("/protected");
-    } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
-    } finally {
-      setIsLoading(false);
+  try {
+    // 1. sign in
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) throw error;
+
+    const user = data.user;
+    if (!user) throw new Error("No user found");
+
+    // 2. look up role from profiles table
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+
+    if (profileError) throw profileError;
+
+    // 3. redirect based on role
+    switch (profile?.role) {
+      case "admin":
+        router.push("/admin");
+        break;
+      case "staff":
+        router.push("/mentee");
+        break;
+      default:
+        router.push("/mentor");
     }
-  };
+  } catch (err: any) {
+    setError(err.message ?? "An error occurred");
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
